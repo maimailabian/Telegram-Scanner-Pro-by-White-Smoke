@@ -15,7 +15,7 @@ export interface TelegramMember {
   phoneNumber?: string;
   lastSeen?: string;
   isPublicPhone: boolean;
-  joinDate: string; // ISO Date string
+  joinDate: string;
   hasReacted: boolean;
   hasMessaged: boolean;
   avatarUrl?: string;
@@ -36,5 +36,13 @@ export enum AppTab {
   SETTINGS = 'settings'
 }
 
-export type Language = 'vi' | 'en';
+export enum LoginStep {
+  METHOD_SELECT = 'method_select',
+  API_CONFIG = 'api_config',
+  PHONE_NUMBER = 'phone_number',
+  OTP_VERIFICATION = 'otp_verification',
+  PASSWORD_2FA = 'password_2fa',
+  QR_CODE = 'qr_code'
+}
+
 export type Theme = 'light' | 'dark';

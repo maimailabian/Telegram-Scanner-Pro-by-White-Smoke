@@ -7,57 +7,125 @@
     <title>Telegram Scanner Pro</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-    <style>
-        body {
-            font-family: 'Inter', sans-serif;
-            background-color: #F8F9FA;
-            color: #1A1A1A;
-        }
-        .bg-main-gradient {
-            background: linear-gradient(135deg, #3299D9 0%, #E6397A 100%);
-        }
-        .custom-scrollbar::-webkit-scrollbar {
-            width: 4px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-track {
-            background: transparent;
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb {
-            background: #E2E8F0;
-            border-radius: 10px;
-        }
-        .btn-dark {
-            background-color: #0F0F10;
-            transition: all 0.2s ease;
-        }
-        .btn-dark:hover {
-            background-color: #1F1F20;
-            transform: translateY(-1px);
-        }
-        .text-purple-main {
-            color: #502b6e;
-        }
-        .bg-purple-main {
-            background-color: #502b6e;
-        }
-        .border-purple-main {
-            border-color: #502b6e;
-        }
-    </style>
-<script type="importmap">
+    
+    <!-- Polyfill core libraries - Tải bản UMD để có biến toàn cục ngay lập tức -->
+    <script src="https://bundle.run/buffer@6.0.3"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
+
+    <script>
+        // Thiết lập hệ thống Polyfill "Hard-coded"
+        (function() {
+            // Buffer từ bundle.run thường nằm ở window.buffer.Buffer hoặc window.Buffer
+            const B = (window.buffer && window.buffer.Buffer) ? window.buffer.Buffer : window.Buffer;
+            if (B) {
+                window.Buffer = B;
+                window.global = window;
+                globalThis.Buffer = B;
+                globalThis.global = window;
+            }
+
+            window.process = {
+                env: { NODE_ENV: 'production' },
+                version: 'v18.0.0',
+                nextTick: (cb) => setTimeout(cb, 0),
+                browser: true,
+                platform: 'browser',
+                cwd: () => '/',
+                on: () => {}, once: () => {}, emit: () => {},
+                stderr: { write: () => {} }, stdout: { write: () => {} }
+            };
+        })();
+
+        // Polyfill Crypto cho các tính năng bảo mật của Telegram (Sync)
+        // Dùng CryptoJS vì GramJS yêu cầu các hàm băm đồng bộ (sync)
+        window.nodeCryptoPolyfill = {
+            createHash: function(algo) {
+                let _data = CryptoJS.lib.WordArray.create();
+                const algoKey = algo.toUpperCase().replace(/-/g, '');
+                return {
+                    update: function(d) {
+                        let wa;
+                        if (window.Buffer && window.Buffer.isBuffer(d)) {
+                            wa = CryptoJS.enc.Hex.parse(d.toString('hex'));
+                        } else if (typeof d === 'string') {
+                            wa = CryptoJS.enc.Utf8.parse(d);
+                        } else if (d instanceof Uint8Array) {
+                            wa = CryptoJS.lib.WordArray.create(d);
+                        } else {
+                            wa = d;
+                        }
+                        _data.concat(wa);
+                        return this;
+                    },
+                    digest: function(enc) {
+                        const hashFn = CryptoJS[algoKey];
+                        if (!hashFn) throw new Error("Unsupported hash: " + algo);
+                        const hash = hashFn(_data);
+                        if (enc === 'hex') return hash.toString(CryptoJS.enc.Hex);
+                        // Trả về Buffer cho GramJS
+                        return window.Buffer.from(hash.toString(CryptoJS.enc.Hex), 'hex');
+                    }
+                };
+            },
+            randomBytes: function(size) {
+                const arr = new Uint8Array(size);
+                window.crypto.getRandomValues(arr);
+                return window.Buffer.from(arr);
+            },
+            randomFillSync: function(buf) {
+                const arr = new Uint8Array(buf.length);
+                window.crypto.getRandomValues(arr);
+                buf.set(arr);
+                return buf;
+            },
+            pbkdf2Sync: function(password, salt, iterations, keylen, digest) {
+                const pwWA = (window.Buffer && window.Buffer.isBuffer(password)) ? CryptoJS.enc.Hex.parse(password.toString('hex')) : password.toString();
+                const saltWA = (window.Buffer && window.Buffer.isBuffer(salt)) ? CryptoJS.enc.Hex.parse(salt.toString('hex')) : salt.toString();
+                
+                const wa = CryptoJS.PBKDF2(pwWA, saltWA, {
+                    keySize: keylen / 4,
+                    iterations: iterations,
+                    hasher: CryptoJS.algo.SHA256
+                });
+                return window.Buffer.from(wa.toString(CryptoJS.enc.Hex), 'hex');
+            }
+        };
+    </script>
+
+    <script type="importmap">
 {
   "imports": {
-    "react/": "https://esm.sh/react@^19.2.4/",
-    "react": "https://esm.sh/react@^19.2.4",
+    "react": "https://esm.sh/react@19.0.0",
+    "react-dom": "https://esm.sh/react-dom@19.0.0",
+    "react-dom/client": "https://esm.sh/react-dom@19.0.0/client",
+    "lucide-react": "https://esm.sh/lucide-react@0.463.0",
+    "buffer": "data:application/javascript,const B=window.Buffer; export { B as Buffer }; export default B;",
+    "node:buffer": "data:application/javascript,const B=window.Buffer; export { B as Buffer }; export default B;",
+    "qrcode": "https://esm.sh/qrcode@1.5.3",
+    "crypto": "data:application/javascript,const p=window.nodeCryptoPolyfill;export const createHash=p.createHash;export const randomBytes=p.randomBytes;export const randomFillSync=p.randomFillSync;export const pbkdf2Sync=p.pbkdf2Sync;export default p;",
+    "node:crypto": "data:application/javascript,const p=window.nodeCryptoPolyfill;export const createHash=p.createHash;export const randomBytes=p.randomBytes;export const randomFillSync=p.randomFillSync;export const pbkdf2Sync=p.pbkdf2Sync;export default p;",
+    "telegram": "https://esm.sh/telegram@2.22.2?bundle&target=esnext&external=crypto,buffer,node:crypto,node:buffer",
     "react-dom/": "https://esm.sh/react-dom@^19.2.4/",
-    "lucide-react": "https://esm.sh/lucide-react@^0.563.0",
-    "@google/genai": "https://esm.sh/@google/genai@^1.39.0"
+    "react/": "https://esm.sh/react@^19.2.4/"
   }
 }
 </script>
+
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #F8F9FA; margin: 0; overflow: hidden; }
+        #app-loader { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background: white; z-index: 9999; transition: opacity 0.5s; }
+        .spinner { width: 30px; height: 30px; border: 3px solid #f3f3f3; border-top: 3px solid #3299D9; border-radius: 50%; animation: spin 0.8s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .bg-main-gradient { background: linear-gradient(135deg, #3299D9 0%, #E6397A 100%); }
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #E2E8F0; border-radius: 10px; }
+    </style>
 </head>
 <body>
+    <div id="app-loader">
+        <div class="spinner"></div>
+        <p style="margin-top: 15px; font-weight: 800; font-size: 10px; letter-spacing: 0.2em; color: #502b6e; text-transform: uppercase;">Telegram Scanner Pro V5.4</p>
+    </div>
     <div id="root"></div>
-    <script type="module" src="/index.tsx"></script>
 </body>
 </html>

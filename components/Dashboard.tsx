@@ -6,28 +6,53 @@ import { TelegramGroup, Theme } from '../types';
 interface DashboardProps {
   onStartScan: (group: TelegramGroup) => void;
   theme: Theme;
+  client?: any;
 }
 
-const Dashboard: React.FC<DashboardProps> = ({ onStartScan, theme }) => {
+const Dashboard: React.FC<DashboardProps> = ({ onStartScan, theme, client }) => {
   const [groups, setGroups] = useState<TelegramGroup[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {
-    const fetchGroups = async () => {
+    const fetchRealGroups = async () => {
+      if (!client) {
+        setLoading(false);
+        return;
+      }
+      
       setLoading(true);
-      await new Promise(resolve => setTimeout(resolve, 800));
-      const mockGroups: TelegramGroup[] = [
-        { id: '1', name: 'Cộng đồng Crypto Việt', memberCount: 15400, type: 'supergroup', avatar: 'https://images.unsplash.com/photo-1621761191319-c6fb62004040?w=100&h=100&fit=crop' },
-        { id: '2', name: 'Giao Lưu Lập Trình', memberCount: 5200, type: 'group', avatar: 'https://images.unsplash.com/photo-1587620962725-abab7fe55159?w=100&h=100&fit=crop' },
-        { id: '3', name: 'Tin Tức Công Nghệ', memberCount: 89000, type: 'channel', avatar: 'https://images.unsplash.com/photo-1518770660439-4636190af475?w=100&h=100&fit=crop' },
-        { id: '4', name: 'Nhóm Mua Bán Online', memberCount: 1250, type: 'group', avatar: 'https://images.unsplash.com/photo-1472851294608-062f824d29cc?w=100&h=100&fit=crop' },
-      ];
-      setGroups(mockGroups);
-      setLoading(false);
+      try {
+        // Đảm bảo client đã kết nối
+        if (!client.connected) await client.connect();
+        
+        const dialogs = await client.getDialogs({ limit: 100 });
+        const tgGroups: TelegramGroup[] = dialogs
+          .filter((d: any) => d.isGroup || d.isChannel)
+          .map((d: any) => {
+            // Lấy ID dưới dạng chuỗi chuẩn của GramJS để có thể dùng getEntity sau này
+            // Với Channel, GramJS thường trả về ID âm hoặc dạng chuỗi đặc biệt
+            const id = d.id.toString();
+            
+            return {
+              id: id,
+              name: d.title || "Nhóm không tên",
+              memberCount: d.entity.participantsCount || 0,
+              type: d.isChannel ? 'channel' : 'group',
+              avatar: null
+            };
+          });
+        
+        setGroups(tgGroups);
+      } catch (error) {
+        console.error("Error fetching dialogs:", error);
+      } finally {
+        setLoading(false);
+      }
     };
-    fetchGroups();
-  }, []);
+
+    fetchRealGroups();
+  }, [client]);
 
   const isDark = theme === 'dark';
   const filteredGroups = groups.filter(g => g.name.toLowerCase().includes(searchTerm.toLowerCase()));
@@ -59,8 +84,8 @@ const Dashboard: React.FC<DashboardProps> = ({ onStartScan, theme }) => {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {[
           { icon: Users, label: 'NHÓM ĐÃ THAM GIA', val: groups.length.toString(), color: 'blue', badge: 'TỔNG CỘNG' },
-          { icon: Database, label: 'THÀNH VIÊN CÓ SĐT', val: '2,485', color: 'cyan', badge: '+18% MỚI' },
-          { icon: RefreshCw, label: 'LƯỢT QUÉT HÔM NAY', val: '128', color: 'purple', badge: 'ACTIVE' }
+          { icon: Database, label: 'THÀNH VIÊN CÓ SĐT', val: 'Kết nối thật', color: 'cyan', badge: 'REAL-TIME' },
+          { icon: RefreshCw, label: 'LƯỢT QUÉT HÔM NAY', val: 'Active', color: 'purple', badge: 'ONLINE' }
         ].map((s, idx) => (
           <div key={idx} className={`${isDark ? 'bg-[#1A1A1A] border-gray-800' : 'bg-white border-gray-100'} p-7 rounded-[32px] shadow-sm border transition-all hover:shadow-xl hover:-translate-y-1 group/stat`}>
              <div className="flex justify-between items-start">
@@ -107,7 +132,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onStartScan, theme }) => {
                         {group.type === 'channel' && <span className="px-2 py-0.5 bg-blue-500/10 text-blue-500 text-[9px] font-black uppercase rounded-lg border border-blue-500/20">CHANNEL</span>}
                       </div>
                       <div className="flex items-center gap-4 text-[11px] font-bold text-gray-400 mt-2 uppercase tracking-wide">
-                        <span className="flex items-center gap-1.5"><Users size={14} className="opacity-60" /> {group.memberCount.toLocaleString()} thành viên</span>
+                        <span className="flex items-center gap-1.5"><Users size={14} className="opacity-60" /> {group.memberCount?.toLocaleString()} thành viên</span>
                         <div className="w-1.5 h-1.5 bg-green-500/40 rounded-full"></div>
                         <span className="text-green-600/80">Sẵn sàng quét</span>
                       </div>
@@ -124,6 +149,11 @@ const Dashboard: React.FC<DashboardProps> = ({ onStartScan, theme }) => {
                 </button>
               </div>
             ))
+          )}
+          {!loading && filteredGroups.length === 0 && (
+             <div className="p-20 text-center text-gray-400 uppercase font-black text-[10px] tracking-widest">
+               Không tìm thấy nhóm hoặc kênh nào.
+             </div>
           )}
         </div>
       </div>
